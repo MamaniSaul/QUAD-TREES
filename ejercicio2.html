@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Compresión de Imágenes con Quad Trees</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        h3 {
+            color: #2c3e50;
+        }
+        p {
+            background-color: #ecf0f1;
+            border-left: 5px solid #3498db;
+            padding: 10px;
+            max-width: 600px;
+            margin: 10px 0;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        input[type="file"] {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        input[type="file"]:hover {
+            background-color: #2980b9;
+        }
+        canvas {
+            margin: 10px;
+            border: 2px solid #2c3e50;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .canvas-container {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body>
+    <h3>Compresión de Imágenes con Quad Trees</h3>
+    <p>Comprimir una imagen en escala de grises utilizando un Quad Tree y evaluar la calidad de la compresión.</p>
+    <input type="file" id="upload" accept="image/*">
+    <div class="canvas-container">
+        <canvas id="originalCanvas"></canvas>
+        <canvas id="compressedCanvas"></canvas>
+    </div>
+
+    <script>
+        const upload = document.getElementById('upload');
+        const originalCanvas = document.getElementById('originalCanvas');
+        const compressedCanvas = document.getElementById('compressedCanvas');
+        const originalCtx = originalCanvas.getContext('2d');
+        const compressedCtx = compressedCanvas.getContext('2d');
+
+        upload.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            const img = new Image();
+            img.onload = () => {
+                originalCanvas.width = img.width;
+                originalCanvas.height = img.height;
+                compressedCanvas.width = img.width;
+                compressedCanvas.height = img.height;
+                originalCtx.drawImage(img, 0, 0);
+
+                const imageData = originalCtx.getImageData(0, 0, img.width, img.height);
+                const quadTree = buildQuadTree(imageData.data, 0, 0, img.width, img.height, img.width);
+                reconstructImage(compressedCtx, quadTree);
+            };
+            img.src = URL.createObjectURL(file);
+        });
+
+        function buildQuadTree(data, x, y, width, height, totalWidth) {
+            if (width <= 1 && height <= 1) {
+                const index = (y * totalWidth + x) * 4;
+                return { color: data[index], x, y, width, height };
+            }
+
+            const halfWidth = Math.floor(width / 2);
+            const halfHeight = Math.floor(height / 2);
+            const children = {
+                nw: buildQuadTree(data, x, y, halfWidth, halfHeight, totalWidth),
+                ne: buildQuadTree(data, x + halfWidth, y, width - halfWidth, halfHeight, totalWidth),
+                sw: buildQuadTree(data, x, y + halfHeight, halfWidth, height - halfHeight, totalWidth),
+                se: buildQuadTree(data, x + halfWidth, y + halfHeight, width - halfWidth, height - halfHeight, totalWidth)
+            };
+
+            const avgColor = (children.nw.color + children.ne.color + children.sw.color + children.se.color) / 4;
+            if (isUniformColor(children, avgColor)) {
+                return { color: avgColor, x, y, width, height };
+            } else {
+                return children;
+            }
+        }
+
+        function isUniformColor(children, avgColor) {
+            return Math.abs(children.nw.color - avgColor) < 5 &&
+                   Math.abs(children.ne.color - avgColor) < 5 &&
+                   Math.abs(children.sw.color - avgColor) < 5 &&
+                   Math.abs(children.se.color - avgColor) < 5;
+        }
+
+        function reconstructImage(ctx, quadTree) {
+            if (quadTree.color !== undefined) {
+                ctx.fillStyle = `rgb(${quadTree.color}, ${quadTree.color}, ${quadTree.color})`;
+                ctx.fillRect(quadTree.x, quadTree.y, quadTree.width, quadTree.height);
+            } else {
+                reconstructImage(ctx, quadTree.nw);
+                reconstructImage(ctx, quadTree.ne);
+                reconstructImage(ctx, quadTree.sw);
+                reconstructImage(ctx, quadTree.se);
+            }
+        }
+    </script>
+</body>
+</html>

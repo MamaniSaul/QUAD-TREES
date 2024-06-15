@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Descomposición de Imágenes con Quad Trees</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+        h1 {
+            margin-top: 20px;
+        }
+        input[type="file"] {
+            margin: 20px 0;
+            padding: 10px;
+            border: 2px solid #007BFF;
+            border-radius: 5px;
+            background-color: #007BFF;
+            color: white;
+            cursor: pointer;
+        }
+        input[type="file"]::-webkit-file-upload-button {
+            visibility: hidden;
+        }
+        input[type="file"]::before {
+            content: 'Seleccionar imagen';
+            display: inline-block;
+            background: #007BFF;
+            border: 1px solid #007BFF;
+            border-radius: 5px;
+            padding: 5px 8px;
+            outline: none;
+            white-space: nowrap;
+            cursor: pointer;
+            text-shadow: 1px 1px #fff;
+            font-weight: 700;
+            font-size: 10pt;
+        }
+        canvas {
+            border: 1px solid #007BFF;
+            margin: 10px;
+        }
+        #canvasContainer {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>Descomposición de Imágenes con Quad Trees</h1>
+    <input type="file" id="upload" accept="image/*">
+    <div id="canvasContainer">
+        <canvas id="originalCanvas" width="500" height="500"></canvas>
+        <canvas id="quadTreeCanvas" width="500" height="500"></canvas>
+    </div>
+
+    <script>
+        class QuadTree {
+            constructor(x, y, width, height, threshold) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.threshold = threshold;
+                this.isHomogeneous = false;
+                this.children = [];
+                this.averageColor = null;
+            }
+
+            split(imageData) {
+                if (this.width <= 1 || this.height <= 1) {
+                    this.isHomogeneous = true;
+                    return;
+                }
+
+                const data = imageData.data;
+                let total = 0;
+                let count = 0;
+
+                for (let i = this.y; i < this.y + this.height; i++) {
+                    for (let j = this.x; j < this.x + this.width; j++) {
+                        const index = (i * imageData.width + j) * 4;
+                        const gray = data[index];
+                        total += gray;
+                        count++;
+                    }
+                }
+
+                const average = total / count;
+                this.averageColor = average;
+
+                let variance = 0;
+                for (let i = this.y; i < this.y + this.height; i++) {
+                    for (let j = this.x; j < this.x + this.width; j++) {
+                        const index = (i * imageData.width + j) * 4;
+                        const gray = data[index];
+                        variance += (gray - average) ** 2;
+                    }
+                }
+
+                variance /= count;
+
+                if (variance <= this.threshold) {
+                    this.isHomogeneous = true;
+                    return;
+                }
+
+                const halfWidth = Math.floor(this.width / 2);
+                const halfHeight = Math.floor(this.height / 2);
+
+                this.children = [
+                    new QuadTree(this.x, this.y, halfWidth, halfHeight, this.threshold),
+                    new QuadTree(this.x + halfWidth, this.y, halfWidth, halfHeight, this.threshold),
+                    new QuadTree(this.x, this.y + halfHeight, halfWidth, halfHeight, this.threshold),
+                    new QuadTree(this.x + halfWidth, this.y + halfHeight, halfWidth, halfHeight, this.threshold),
+                ];
+
+                for (const child of this.children) {
+                    child.split(imageData);
+                }
+            }
+
+            draw(ctx) {
+                if (this.isHomogeneous) {
+                    ctx.fillStyle = `rgb(${this.averageColor}, ${this.averageColor}, ${this.averageColor})`;
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                } else {
+                    for (const child of this.children) {
+                        child.draw(ctx);
+                    }
+                }
+            }
+        }
+
+        document.getElementById('upload').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const img = new Image();
+                img.onload = () => {
+                    const originalCanvas = document.getElementById('originalCanvas');
+                    const quadTreeCanvas = document.getElementById('quadTreeCanvas');
+                    const originalCtx = originalCanvas.getContext('2d');
+                    const quadTreeCtx = quadTreeCanvas.getContext('2d');
+
+                    originalCtx.drawImage(img, 0, 0, originalCanvas.width, originalCanvas.height);
+                    const imageData = originalCtx.getImageData(0, 0, originalCanvas.width, originalCanvas.height);
+
+                    const threshold = 500;  // Threshold for homogeneity
+                    const quadTree = new QuadTree(0, 0, originalCanvas.width, originalCanvas.height, threshold);
+                    quadTree.split(imageData);
+
+                    quadTree.draw(quadTreeCtx);
+                };
+                img.src = URL.createObjectURL(file);
+            }
+        });
+    </script>
+</body>
+</html>
